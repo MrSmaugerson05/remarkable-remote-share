@@ -80,17 +80,25 @@ run_control() {
     env "${COMMON_ENV[@]}" "$APP/remote-share-control" "$@"
 }
 
+fail() {
+    echo "controller test failed: $*" >&2
+    [ ! -f "$APP/run/tailscaled.log" ] || tail -n 30 "$APP/run/tailscaled.log" >&2
+    exit 1
+}
+
 assert_off_and_clean() {
-    [ "$(run_control status-fast)" = OFF ]
-    [ ! -e "$APP/run/tailscaled.pid" ]
-    [ ! -S "$APP/run/tailscaled.sock" ]
+    [ "$(run_control status-fast)" = OFF ] || fail 'status did not return OFF'
+    [ ! -e "$APP/run/tailscaled.pid" ] || fail 'stale PID file remains'
+    [ ! -S "$APP/run/tailscaled.sock" ] || fail 'stale control socket remains'
 }
 
 echo 'controller: successful ON/OFF'
-output=$(run_control on)
+if ! output=$(run_control on); then
+    fail 'ON command failed'
+fi
 case "$output" in 'ON expires='*' url=http://192.0.2.24:8080/') ;; *) echo "unexpected output: $output" >&2; exit 1 ;; esac
-[ "$(run_control status-fast)" != OFF ]
-run_control off >/dev/null
+[ "$(run_control status-fast)" != OFF ] || fail 'status returned OFF immediately after ON'
+run_control off >/dev/null || fail 'OFF command failed'
 assert_off_and_clean
 
 echo 'controller: authentication required'
