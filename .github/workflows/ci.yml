@@ -46,7 +46,11 @@ jobs:
           tests/test-qmd.sh
 
       - name: Scan public source
-        run: scripts/privacy-check.sh working
+        run: |
+          scripts/privacy-check.sh working
+          scripts/privacy-check.sh history
+          pwsh -NoProfile -File scripts/privacy-check.ps1 working
+          pwsh -NoProfile -File scripts/privacy-check.ps1 history
 
       - name: Fetch pinned XOVI source
         run: |

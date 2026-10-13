@@ -22,7 +22,7 @@ if ($Mode -ne 'history' -and (Test-Path -LiteralPath $localPatterns -PathType Le
     $patterns += Get-Content -LiteralPath $localPatterns |
         Where-Object { $_ -notmatch '^\s*(#|$)' }
 }
-$forbidden = '(?:' + ($patterns -join '|') + ')'
+$forbidden = '(' + ($patterns -join '|') + ')'
 
 Push-Location $Root
 try {
