@@ -1,0 +1,7 @@
+version 0.1.0
+
+import? _ZN17QNetworkInterface17interfaceFromNameERK7QString>QNetworkInterface
+import? _ZNK12QHostAddress8isGlobalEv>bool
+
+override _ZN17QNetworkInterface17interfaceFromNameERK7QString
+override _ZNK12QHostAddress8isGlobalEv

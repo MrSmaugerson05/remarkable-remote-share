@@ -1,0 +1,13 @@
+* text=auto
+*.sh text eol=lf
+*.qmd text eol=lf
+*.xovi text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ps1 text eol=crlf
+Makefile text eol=lf
+compatibility.env text eol=lf
+config.example text eol=lf
+src/controller/remote-share-control text eol=lf

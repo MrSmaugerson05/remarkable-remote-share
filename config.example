@@ -1,0 +1,4 @@
+# Installed as /home/root/remote-share/config with mode 0600.
+REMOTE_SHARE_HOSTNAME=remarkable-paper-pro
+REMOTE_SHARE_PORT=8080
+AUTO_OFF_SECONDS=1800

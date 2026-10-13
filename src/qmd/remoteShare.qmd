@@ -1,0 +1,89 @@
+; Remote Share home-screen toggle for reMarkable OS 3.28.0.172.
+; Requires qt-resource-rebuilder and qt-command-executor from rm-xovi-extensions v19.
+
+AFFECT [[13636194074538366841]]
+	TRAVERSE [[6502786168]]#[[6504254477]]
+		LOCATE BEFORE ALL
+		INSERT {
+			property bool remoteShareOn: false
+			property bool remoteShareBusy: false
+			property bool remoteShareError: false
+			property var remoteShareExpiryTimer: Qt.createQmlObject('import QtQuick 2.15; Timer { repeat: false; onTriggered: { parent.remoteShareOn = false; } }', root)
+			property var remoteShareProbeTimer: Qt.createQmlObject('import QtQuick 2.15; Timer { interval: 1000; repeat: false; running: true; onTriggered: parent.refreshRemoteShareState(); }', root)
+
+			function applyRemoteShareStatus(output) {
+				if (output.indexOf("ON ") === 0) {
+					root.remoteShareOn = true;
+					root.remoteShareError = false;
+					var match = output.match(/expires=([0-9]+)/);
+					if (match) {
+						var remaining = (parseInt(match[1], 10) * 1000) - Date.now();
+						root.remoteShareExpiryTimer.interval = Math.max(1000, remaining);
+						root.remoteShareExpiryTimer.restart();
+					}
+				} else if (output.indexOf("OFF") === 0) {
+					root.remoteShareOn = false;
+					root.remoteShareError = false;
+					root.remoteShareExpiryTimer.stop();
+				}
+			}
+
+			function runRemoteShareCommand(arguments, timeout, markBusy) {
+				if (markBusy && root.remoteShareBusy) { return; }
+				if (markBusy) { root.remoteShareBusy = true; }
+				var exec = null;
+				try {
+					exec = Qt.createQmlObject("import net.asivery.CommandExecutor 1.0; AsyncCommandExecutor {}", root);
+				} catch (error) {
+					root.remoteShareBusy = false;
+					root.remoteShareError = true;
+					return;
+				}
+				exec.command = "/home/root/remote-share/remote-share-control";
+				exec.arguments = arguments;
+				exec.stdOutAvailable.connect(function(output) { root.applyRemoteShareStatus(output); });
+				exec.runningChanged.connect(function() {
+					if (!exec.running) {
+						if (markBusy) { root.remoteShareBusy = false; }
+						if (exec.exitCode !== 0) { root.remoteShareError = true; }
+						exec.destroy();
+					}
+				});
+				if (!exec.startCommand(timeout)) {
+					if (markBusy) { root.remoteShareBusy = false; }
+					root.remoteShareError = true;
+					exec.destroy();
+				}
+			}
+
+			function refreshRemoteShareState() {
+				root.runRemoteShareCommand(["status-fast"], 5000, false);
+			}
+
+			function toggleRemoteShare() {
+				root.remoteShareError = false;
+				root.runRemoteShareCommand(["toggle"], 30000, true);
+			}
+		}
+
+		TRAVERSE [[254501108490678590]]#[[16596251247453125840]] > [[254501558939456351]]#[[6391657810197849963]]
+			LOCATE AFTER ALL
+			INSERT {
+				~&7081201431623&~ {
+					~&5972374&~: remoteShareBut
+					~&7081629735527&~.~&254522510204479688&~: ~&5971598&~.~&14019785274593562237&~
+					~&7081629735527&~.~&8399470807760157065&~: ~&6504329801&~
+					~&7081629735527&~.~&16239278111605497701&~: ~&7082729686082&~
+
+					~&477346483278530855&~: ~&6504254477&~.~&6504391364&~
+					~&16400203684079186719&~: ~&6504254477&~.~&16400203684079186719&~
+					~&15639918876026341067&~: ~&6504254477&~
+					~&12473595850146141341&~: [~&"233737316206498&~, ~&"7082656280847&~, ~&"7834776425552261693&~]
+					~&5336234142035948531&~: ~&6504254477&~.toggleRemoteShare()
+					~&233748328658231&~: remoteShareBut.~&12473595850146141341&~.~&7713146641368448&~(~&6504254477&~.~&6504391364&~)
+					~&8399601734642709923&~: ~&6504254477&~.remoteShareBusy ? ~&"7424602933551009652&~ : (~&6504254477&~.remoteShareError ? ~&"18215817719560467479&~ : (~&6504254477&~.remoteShareOn ? ~&"3799445540336449548&~ : ~&"6968812125536432958&~))
+				}
+			}
+		END TRAVERSE
+	END TRAVERSE
+END AFFECT

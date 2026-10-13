@@ -1,0 +1,291 @@
+#!/bin/bash
+set -euo pipefail
+
+BASE=${REMOTE_SHARE_BASE:-/home/root/remote-share}
+BIN=${REMOTE_SHARE_BIN:-$BASE/bin}
+RUN=${REMOTE_SHARE_RUN:-$BASE/run}
+STATE=${REMOTE_SHARE_STATE:-$BASE/state}
+CONFIG=${REMOTE_SHARE_CONFIG:-$BASE/config}
+SOCKET=${REMOTE_SHARE_SOCKET:-$RUN/tailscaled.sock}
+PIDFILE=${REMOTE_SHARE_PIDFILE:-$RUN/tailscaled.pid}
+LOGFILE=${REMOTE_SHARE_LOGFILE:-$RUN/tailscaled.log}
+STATUSFILE=${REMOTE_SHARE_STATUSFILE:-$RUN/status}
+TIMER_PIDFILE=${REMOTE_SHARE_TIMER_PIDFILE:-$RUN/auto-off.pid}
+LOCKDIR=${REMOTE_SHARE_LOCKDIR:-$RUN/control.lock}
+TAILSCALE_BIN=${REMOTE_SHARE_TAILSCALE_BIN:-$BIN/tailscale}
+TAILSCALED_BIN=${REMOTE_SHARE_TAILSCALED_BIN:-$BIN/tailscaled}
+IMPORTER_URL=${REMOTE_SHARE_IMPORTER_URL:-http://127.0.0.1:80/}
+CONTROL_PATH=${REMOTE_SHARE_CONTROL_PATH:-$BASE/remote-share-control}
+
+REMOTE_SHARE_HOSTNAME=remarkable-paper-pro
+REMOTE_SHARE_PORT=8080
+AUTO_OFF_SECONDS=1800
+
+if [ -f "$CONFIG" ]; then
+    # The installed config is root-owned and mode 0600.
+    # shellcheck source=/dev/null
+    source "$CONFIG"
+fi
+
+validate_config() {
+    printf '%s' "$REMOTE_SHARE_HOSTNAME" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9-]{0,62}$' || {
+        echo "Invalid REMOTE_SHARE_HOSTNAME" >&2
+        return 1
+    }
+    case "$REMOTE_SHARE_PORT" in
+        ''|*[!0-9]*) echo "Invalid REMOTE_SHARE_PORT" >&2; return 1 ;;
+    esac
+    case "$AUTO_OFF_SECONDS" in
+        ''|*[!0-9]*) echo "Invalid AUTO_OFF_SECONDS" >&2; return 1 ;;
+    esac
+    if [ "$REMOTE_SHARE_PORT" -lt 1024 ] || [ "$REMOTE_SHARE_PORT" -gt 65535 ]; then
+        echo "REMOTE_SHARE_PORT must be between 1024 and 65535" >&2
+        return 1
+    fi
+    if [ "$AUTO_OFF_SECONDS" -lt 60 ] || [ "$AUTO_OFF_SECONDS" -gt 86400 ]; then
+        echo "AUTO_OFF_SECONDS must be between 60 and 86400" >&2
+        return 1
+    fi
+}
+
+validate_config
+mkdir -p "$RUN" "$STATE"
+chmod 700 "$BASE" "$RUN" "$STATE"
+
+ts() {
+    "$TAILSCALE_BIN" --socket="$SOCKET" "$@"
+}
+
+pid_matches() {
+    local pid=$1 expected=$2
+    [ -r "/proc/$pid/cmdline" ] || return 1
+    { tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null | grep -Fq "$expected"
+}
+
+pid_is_live() {
+    local pid
+    [ -s "$PIDFILE" ] || return 1
+    pid=$(cat "$PIDFILE")
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$pid" 2>/dev/null && pid_matches "$pid" "$TAILSCALED_BIN"
+}
+
+write_status() {
+    printf '%s\n' "$1" > "$STATUSFILE"
+    chmod 600 "$STATUSFILE"
+}
+
+start_daemon() {
+    if pid_is_live && [ -S "$SOCKET" ]; then
+        return 0
+    fi
+
+    rm -f "$PIDFILE" "$SOCKET"
+    write_status STARTING
+    nohup "$TAILSCALED_BIN" \
+        --tun=userspace-networking \
+        --socket="$SOCKET" \
+        --state="$STATE/node.state" \
+        --statedir="$STATE" \
+        --port=0 \
+        --no-logs-no-support \
+        >"$LOGFILE" 2>&1 &
+    printf '%s\n' "$!" > "$PIDFILE"
+    chmod 600 "$PIDFILE"
+    if [ -e "$LOGFILE" ]; then
+        chmod 600 "$LOGFILE"
+    fi
+
+    for _ in $(seq 1 50); do
+        if [ -S "$SOCKET" ]; then
+            write_status DAEMON_READY
+            return 0
+        fi
+        if ! pid_is_live; then
+            write_status ERROR
+            tail -n 30 "$LOGFILE" >&2 || true
+            return 1
+        fi
+        sleep 0.1
+    done
+
+    write_status ERROR
+    echo "tailscaled did not create its control socket" >&2
+    return 1
+}
+
+stop_timer() {
+    if [ "${1:-kill}" = kill ] && [ -s "$TIMER_PIDFILE" ]; then
+        local pid
+        pid=$(cat "$TIMER_PIDFILE")
+        case "$pid" in ''|*[!0-9]*) pid='' ;; esac
+        [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
+    fi
+    rm -f "$TIMER_PIDFILE"
+}
+
+stop_daemon() {
+    if [ -S "$SOCKET" ]; then
+        ts serve reset >/dev/null 2>&1 || true
+        ts set --shields-up=true >/dev/null 2>&1 || true
+        ts down >/dev/null 2>&1 || true
+    fi
+
+    if pid_is_live; then
+        local pid
+        pid=$(cat "$PIDFILE")
+        kill "$pid" 2>/dev/null || true
+        for _ in $(seq 1 30); do
+            pid_is_live || break
+            sleep 0.1
+        done
+        if pid_is_live; then
+            kill -KILL "$pid" 2>/dev/null || true
+        fi
+    fi
+
+    rm -f "$PIDFILE" "$SOCKET"
+    write_status OFF
+}
+
+turn_off() {
+    stop_timer "${1:-kill}"
+    stop_daemon
+}
+
+importer_is_ready() {
+    wget -q -T 4 -O /dev/null "$IMPORTER_URL" || {
+        echo "The native importer is unavailable. Toggle Settings > General > Storage > USB web interface OFF and ON." >&2
+        return 1
+    }
+}
+
+configure_private_node() {
+    ts up \
+        --reset \
+        --hostname="$REMOTE_SHARE_HOSTNAME" \
+        --accept-dns=false \
+        --accept-routes=false \
+        --advertise-routes= \
+        --advertise-exit-node=false \
+        --exit-node= \
+        --exit-node-allow-lan-access=false \
+        --netfilter-mode=off \
+        --report-posture=false \
+        --shields-up=false \
+        --snat-subnet-routes=false \
+        --ssh=false \
+        --stateful-filtering=false \
+        "$@"
+}
+
+start_timer() {
+    stop_timer
+    nohup /bin/sh -c "sleep \"\$1\"; exec \"\$2\" expire" remote-share-timer \
+        "$AUTO_OFF_SECONDS" "$CONTROL_PATH" >/dev/null 2>&1 &
+    printf '%s\n' "$!" > "$TIMER_PIDFILE"
+    chmod 600 "$TIMER_PIDFILE"
+}
+
+turn_on() {
+    local ip expires url
+    write_status STARTING
+    if ! start_daemon || ! configure_private_node --timeout=8s || ! importer_is_ready; then
+        turn_off
+        return 1
+    fi
+    if ! ts serve --bg --http="$REMOTE_SHARE_PORT" "$IMPORTER_URL" >/dev/null; then
+        turn_off
+        return 1
+    fi
+    ip=$(ts ip -4 | sed -n '1p')
+    if [ -z "$ip" ]; then
+        echo "Tailscale did not assign an IPv4 address" >&2
+        turn_off
+        return 1
+    fi
+    start_timer
+    expires=$(( $(date +%s) + AUTO_OFF_SECONDS ))
+    url="http://$ip:$REMOTE_SHARE_PORT/"
+    write_status "ON expires=$expires url=$url"
+    echo "ON expires=$expires url=$url"
+}
+
+authenticate() {
+    write_status AUTHENTICATING
+    if ! start_daemon || ! configure_private_node --timeout=10m; then
+        turn_off
+        return 1
+    fi
+    if ! ts status >/dev/null; then
+        turn_off
+        return 1
+    fi
+    echo AUTHENTICATED
+    turn_off
+}
+
+status_fast() {
+    if pid_is_live && [ -r "$STATUSFILE" ] && grep -q '^ON ' "$STATUSFILE"; then
+        cat "$STATUSFILE"
+    else
+        echo OFF
+    fi
+}
+
+show_status() {
+    if ! pid_is_live; then
+        echo OFF
+        return 0
+    fi
+    status_fast
+    ts status 2>&1 || true
+}
+
+acquire_lock() {
+    if ! mkdir "$LOCKDIR" 2>/dev/null; then
+        echo "Remote Share is already changing state" >&2
+        return 1
+    fi
+    trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
+}
+
+case "${1:-status}" in
+    auth)
+        acquire_lock
+        authenticate
+        ;;
+    on)
+        acquire_lock
+        turn_on
+        ;;
+    off|stop)
+        acquire_lock
+        turn_off
+        echo OFF
+        ;;
+    toggle)
+        acquire_lock
+        if status_fast | grep -q '^ON '; then
+            turn_off
+            echo OFF
+        else
+            turn_on
+        fi
+        ;;
+    expire)
+        acquire_lock
+        turn_off keep
+        echo OFF
+        ;;
+    status-fast)
+        status_fast
+        ;;
+    status)
+        show_status
+        ;;
+    *)
+        echo "usage: $0 {auth|on|off|toggle|status|status-fast}" >&2
+        exit 2
+        ;;
+esac

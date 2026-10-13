@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: [v0.1.0]
+
+permissions:
+  contents: write
+
+env:
+  XOVI_COMMIT: 0c8d5269b55c851901d4e4a754dc2d7deab40b17
+  TOOLCHAIN_IMAGE: eeems/remarkable-toolchain:latest-rmpp@sha256:0d6ec46299b535a82e883e7578905a3e68dc30881bc0736f2f0d4c7cdff0da6f
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Verify tag and source
+        run: |
+          test "$GITHUB_REF_NAME" = v0.1.0
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+          mapfile -t scripts < <(find scripts tests src/controller -type f \( -name '*.sh' -o -name 'remote-share-control' \) -print)
+          shellcheck "${scripts[@]}"
+          tests/test-controller.sh
+          tests/test-device-install.sh
+          tests/test-qmd.sh
+          scripts/privacy-check.sh working
+          scripts/privacy-check.sh history
+
+      - name: Fetch pinned XOVI source
+        run: |
+          mkdir -p .tools
+          git init .tools/xovi
+          git -C .tools/xovi remote add origin https://github.com/asivery/xovi.git
+          git -C .tools/xovi fetch --depth=1 origin "$XOVI_COMMIT"
+          git -C .tools/xovi checkout --detach FETCH_HEAD
+          test "$(git -C .tools/xovi rev-parse HEAD)" = "$XOVI_COMMIT"
+
+      - name: Build extension and release bundle
+        run: |
+          mkdir -p build
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/work" \
+            --workdir /work \
+            "$TOOLCHAIN_IMAGE" \
+            bash -lc 'source /opt/codex/ferrari/5.8.203/environment-setup-cortexa53-crypto-remarkable-linux && make -C src/loopback-importer XOVI_REPO=/work/.tools/xovi && cp src/loopback-importer/loopback-importer.so build/'
+          file build/loopback-importer.so | grep -Fq 'ARM aarch64'
+          scripts/build-release.sh
+          tests/test-release.sh
+          (cd dist && sha256sum --check SHA256SUMS)
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.1.0 \
+            dist/remarkable-remote-share-0.1.0.tar.gz \
+            dist/SHA256SUMS \
+            --verify-tag \
+            --title 'remarkable-remote-share v0.1.0' \
+            --notes 'Initial exact-firmware release for reMarkable Paper Pro on OS 3.28.0.172. See the README for prerequisites, installation, and recovery.'

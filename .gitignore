@@ -1,0 +1,44 @@
+# Build output
+build/
+dist/
+.tools/
+*.o
+*.so
+*.a
+*.exe
+src/loopback-importer/xovi.cpp
+src/loopback-importer/xovi.h
+
+# Downloaded packages and archives
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+packages/
+toolchain/
+
+# Device and authentication state
+state/
+run/
+*.state
+*.key
+*.pem
+id_*
+authorized_keys
+.env
+.env.*
+
+# Firmware-derived and private material
+hashtab*
+stock-web-*
+backup*/
+backups/
+evidence/
+research/
+*.log
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

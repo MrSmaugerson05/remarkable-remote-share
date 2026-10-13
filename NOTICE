@@ -1,0 +1,24 @@
+remarkable-remote-share
+
+Copyright (C) 2026 MrSmaugerson05
+
+This project is distributed under the GNU General Public License, version 3.
+
+It depends on or was informed by the following independent projects:
+
+- XOVI by asivery: https://github.com/asivery/xovi
+- rm-xovi-extensions by asivery: https://github.com/asivery/rm-xovi-extensions
+- Vellum: https://github.com/vellum-dev/vellum
+- xovi-tripletap by rmitchellscott: https://github.com/rmitchellscott/xovi-tripletap
+- Toltec, including webinterface-localhost: https://github.com/toltec-dev/toltec
+- rM-self-serve web-interface packages:
+  https://github.com/rM-self-serve/webinterface-onboot
+  https://github.com/rM-self-serve/webinterface-wifi
+- Tailscale: https://tailscale.com
+
+Names and trademarks belong to their respective owners. reMarkable and Paper Pro
+are trademarks of reMarkable AS. This project is not affiliated with or endorsed by
+reMarkable AS or Tailscale Inc.
+
+The general technique of reaching reMarkable's built-in web interface remotely has
+prior community implementations. This project claims no originality for that idea.
