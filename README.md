@@ -1,8 +1,28 @@
-# remarkable-remote-share
+# Remote Share for reMarkable Paper Pro
 
-Remote Share adds an on-demand file-transfer switch to a reMarkable Paper Pro home screen. Pressing it starts a userspace Tailscale node and exposes the stock USB web interface to devices on the same Tailscale network. Pressing it again stops the connection. It also shuts itself down after 30 minutes by default.
+Remote Share is a private, on-demand file-transfer tool for the reMarkable Paper Pro. It is an open-source reMarkable Connect alternative for one specific job: reaching the tablet's stock web interface from a phone or computer over Tailscale, without plugging in a USB cable every time.
+
+After the one-time USB installation, a home-screen switch turns remote sharing on and off. While it is on, you can open the familiar reMarkable web interface in a browser and transfer documents from Windows, macOS, Linux, Android, or iOS. The connection shuts itself down after 30 minutes by default.
 
 The project deliberately has a narrow compatibility target. It does not install or patch the mod framework, enable Wi-Fi SSH, alter xochitl's service, add a boot daemon, or expose the web interface to the public internet.
+
+## What problem it solves
+
+The built-in reMarkable USB web interface is useful, but normally requires a cable and a local USB connection. Remote Share makes that same interface available through your private Tailscale network when you ask for it.
+
+- Transfer PDFs, EPUBs, and other files supported by the stock importer.
+- Reach the Paper Pro from a laptop or phone away from the tablet's USB cable.
+- Keep the service off when it is not being used.
+- Avoid a permanent sync daemon, public port, Wi-Fi SSH server, or custom browser on the tablet.
+- Keep using the native reMarkable document importer instead of writing directly into its document database.
+
+This is remote browser-based file transfer, not continuous folder synchronization.
+
+## Is this a reMarkable Connect alternative?
+
+For remote file transfer, yes. Remote Share gives a modified Paper Pro an independent way to move files through a browser without using the reMarkable cloud for that transfer session. The software is open source and does not require a Remote Share subscription.
+
+It is not a complete replacement for reMarkable Connect. It does not provide cloud library synchronization, automatic cloud backup, handwriting conversion, official desktop or mobile app integration, collaboration features, or reMarkable support. Connect and Remote Share can coexist; this project does not remove, disable, or bypass Connect.
 
 ## Exact compatibility
 
@@ -32,7 +52,7 @@ No service is enabled. Tailscale starts only when the button is turned on and st
 
 ## Install
 
-Download the host installer from this repository. The first installation still uses USB SSH because the tablet must not expose SSH over Wi-Fi. Supply your own USB host address and private-key path; neither is stored by this project.
+Download the host installer from this repository and use the assets from the [latest release](https://github.com/MrSmaugerson05/remarkable-remote-share/releases/latest). The first installation still uses USB SSH because the tablet must not expose SSH over Wi-Fi. Supply your own USB host address and private-key path; neither is stored by this project.
 
 Windows PowerShell:
 
@@ -127,6 +147,32 @@ Never bypass a version check or reuse the included QMD against a different firmw
 - Sharing consumes more battery while active. The default timeout limits that cost, but it is still best to turn the switch OFF when finished.
 - Anyone authorized by your Tailscale access policy to reach this node and port can reach the importer while it is ON. Use restrictive Tailscale grants and revoke lost devices promptly.
 - Tailscale is downloaded at install time and is not included in this repository or its releases.
+
+## Frequently asked questions
+
+### Can I transfer files to a reMarkable Paper Pro without USB?
+
+Yes, after the initial USB SSH installation. Turn on Remote Share from the tablet, then open the URL reported by the controller from another device on the same Tailscale network. Normal use does not require the USB cable.
+
+### Does this work without a reMarkable Connect subscription?
+
+Remote Share does not depend on Connect for its file-transfer path. It uses the stock on-device web importer, XOVI, and Tailscale. It does not reproduce Connect's cloud sync or subscription features.
+
+### Is this reMarkable cloud sync or Syncthing?
+
+No. It is an on-demand gateway to the built-in web interface. It does not watch folders, synchronize in the background, or maintain another copy of your notebook library.
+
+### Does it enable SSH over Wi-Fi?
+
+No. Remote Share exposes only the stock importer through Tailscale while the switch is on. SSH remains limited to the existing USB connection.
+
+### Is the reMarkable web interface public on the internet?
+
+No. Tailscale Serve makes it reachable only inside the user's Tailscale network. The project does not configure Funnel or a public listening port.
+
+### Does it work on reMarkable 2, Paper Pro Move, or newer firmware?
+
+No. Version 0.1.0 intentionally supports only the original reMarkable Paper Pro running OS 3.28.0.172 with the exact dependency versions listed above. Unsupported devices and firmware are rejected by the installer.
 
 ## Building
 
