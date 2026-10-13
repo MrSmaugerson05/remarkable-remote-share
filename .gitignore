@@ -27,6 +27,7 @@ id_*
 authorized_keys
 .env
 .env.*
+.privacy-local-patterns
 
 # Firmware-derived and private material
 hashtab*

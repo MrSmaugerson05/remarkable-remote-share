@@ -11,6 +11,7 @@ readonly APK_DB=$HOME_ROOT/.vellum/lib/apk/db/installed
 readonly HASHTAB=$HOME_ROOT/xovi/exthome/qt-resource-rebuilder/hashtab
 readonly COMMAND_EXECUTOR=$EXT_DIR/qt-command-executor.so
 readonly BACKUP_ROOT=$HOME_ROOT/remote-share-backups
+PAYLOAD_VERSION=
 
 fail() {
     echo "Install stopped: $*" >&2
@@ -61,7 +62,11 @@ check_payload() {
         compatibility.env device-uninstall.sh VERSION tailscale tailscaled; do
         [ -s "$payload/$file" ] || fail "payload file is missing: $file"
     done
-    [ "$(cat "$payload/VERSION")" = '0.1.0' ] || fail 'payload version is not 0.1.0'
+    PAYLOAD_VERSION=$(awk -F= '$1 == "PROJECT_VERSION" { print $2; exit }' "$payload/compatibility.env")
+    printf '%s\n' "$PAYLOAD_VERSION" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+$' ||
+        fail 'compatibility.env has an invalid PROJECT_VERSION'
+    [ "$(cat "$payload/VERSION")" = "$PAYLOAD_VERSION" ] ||
+        fail 'VERSION does not match compatibility.env'
 }
 
 restore_backup() {
@@ -114,7 +119,7 @@ install_payload() {
     "$APP_DIR/remote-share-control" off >/dev/null
     trap - ERR
 
-    echo "Installed Remote Share 0.1.0. Sharing is OFF."
+    echo "Installed Remote Share $PAYLOAD_VERSION. Sharing is OFF."
     echo "Backup of replaced files: $backup"
     echo 'Reboot the tablet before authenticating so XOVI loads the new QMD and importer.'
 }

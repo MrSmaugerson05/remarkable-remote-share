@@ -2,7 +2,11 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-VERSION=0.1.0
+VERSION=$(awk -F= '$1 == "PROJECT_VERSION" { print $2; exit }' "$ROOT/compatibility.env")
+if ! printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+$'; then
+    echo 'PROJECT_VERSION is not a release version' >&2
+    exit 1
+fi
 OUTPUT=${1:-$ROOT/dist}
 STAGE=$OUTPUT/remarkable-remote-share-$VERSION
 

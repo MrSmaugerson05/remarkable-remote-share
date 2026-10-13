@@ -19,6 +19,15 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
+      - name: Load project version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(awk -F= '$1 == "PROJECT_VERSION" { print $2; exit }' compatibility.env)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "RELEASE_NAME=remarkable-remote-share-$version" >> "$GITHUB_ENV"
+          echo "RELEASE_ARCHIVE=remarkable-remote-share-$version.tar.gz" >> "$GITHUB_ENV"
+
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
 
@@ -68,9 +77,9 @@ jobs:
       - name: Upload release candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: remarkable-remote-share-0.1.0
+          name: ${{ env.RELEASE_NAME }}
           path: |
-            dist/remarkable-remote-share-0.1.0.tar.gz
+            dist/${{ env.RELEASE_ARCHIVE }}
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 7

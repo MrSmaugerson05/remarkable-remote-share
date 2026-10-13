@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+PROJECT_VERSION=$(awk -F= '$1 == "PROJECT_VERSION" { print $2; exit }' "$ROOT/compatibility.env")
 TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/remote-share-installer.XXXXXXXX")
 FIXTURE=$TEST_ROOT/rootfs
 PAYLOAD=$TEST_ROOT/payload
@@ -44,15 +45,16 @@ V:19.0.0-r4
 EOF
     printf 'executor' > "$FIXTURE/home/root/xovi/extensions.d/qt-command-executor.so"
     printf 'table for 3.28.0.172' > "$FIXTURE/home/root/xovi/exthome/qt-resource-rebuilder/hashtab"
-    for file in remoteShare.qmd loopback-importer.so config.example compatibility.env tailscale tailscaled; do
+    for file in remoteShare.qmd loopback-importer.so config.example tailscale tailscaled; do
         printf 'fixture\n' > "$PAYLOAD/$file"
     done
+    cp "$ROOT/compatibility.env" "$PAYLOAD/compatibility.env"
     cat > "$PAYLOAD/remote-share-control" <<'EOF'
 #!/bin/sh
 exit 0
 EOF
     cp "$ROOT/scripts/device-uninstall.sh" "$PAYLOAD/device-uninstall.sh"
-    printf '%s\n' '0.1.0' > "$PAYLOAD/VERSION"
+    printf '%s\n' "$PROJECT_VERSION" > "$PAYLOAD/VERSION"
     chmod +x "$PAYLOAD/remote-share-control" "$PAYLOAD/tailscale" "$PAYLOAD/tailscaled" "$PAYLOAD/device-uninstall.sh"
 }
 
@@ -116,6 +118,11 @@ expect_failure missing-hashtable
 reset_fixture
 printf 'table for another release' > "$FIXTURE/home/root/xovi/exthome/qt-resource-rebuilder/hashtab"
 expect_failure wrong-hashtable
+
+echo 'installer: mismatched payload version'
+reset_fixture
+printf '%s\n' '9.9.9' > "$PAYLOAD/VERSION"
+expect_failure payload-version
 
 echo 'installer: upgrade backup'
 reset_fixture

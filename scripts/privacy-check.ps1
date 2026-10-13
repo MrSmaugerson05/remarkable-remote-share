@@ -3,15 +3,26 @@ param([ValidateSet('working', 'staged', 'history')][string]$Mode = 'working')
 
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$first = 'Wya'
-$second = 'Hea'
 $mail = 'gma' + 'il[.]com'
 $network = '[.]ts[.]net'
-$address = '100[.][0-9]{1,3}[.]'
+$address = '100[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}'
 $key = 'tskey' + '-'
 $state = 'tailscaled' + '[.]state'
 $private = 'BEGIN.*PRIVATE' + ' KEY'
-$forbidden = "$($first)tt|$($second)th|@$mail|[A-Za-z]:[/\\]Users[/\\]|$network|$address|$key|$private|$state"
+$patterns = @("@$mail", '[A-Za-z]:[/\\]Users[/\\]', $network, $address, $key, $private, $state)
+$localPatterns = if ($env:REMOTE_SHARE_PRIVATE_PATTERNS_FILE) {
+    $env:REMOTE_SHARE_PRIVATE_PATTERNS_FILE
+} else {
+    Join-Path $Root '.privacy-local-patterns'
+}
+
+# Exact personal identifiers stay in an ignored local file. Historical public
+# commits use generic rules; working and staged scans apply the local additions.
+if ($Mode -ne 'history' -and (Test-Path -LiteralPath $localPatterns -PathType Leaf)) {
+    $patterns += Get-Content -LiteralPath $localPatterns |
+        Where-Object { $_ -notmatch '^\s*(#|$)' }
+}
+$forbidden = '(?:' + ($patterns -join '|') + ')'
 
 Push-Location $Root
 try {

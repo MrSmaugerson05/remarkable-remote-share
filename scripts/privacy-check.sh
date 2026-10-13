@@ -4,22 +4,29 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 MODE=${1:-working}
 MANIFEST=$ROOT/.public-files
+LOCAL_PATTERNS=${REMOTE_SHARE_PRIVATE_PATTERNS_FILE:-$ROOT/.privacy-local-patterns}
 TEMP=$(mktemp -d "${TMPDIR:-/tmp}/remote-share-privacy.XXXXXXXX")
 trap 'case "$TEMP" in "${TMPDIR:-/tmp}"/remote-share-privacy.*) rm -rf "$TEMP" ;; esac' EXIT
 
-first=Wya
-second=Hea
 mail_a=gma
 domain_tail='il[.]com'
 network_suffix='[.]ts[.]net'
-address_prefix='100[.]'
+address_prefix='100[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}'
 key_prefix='tskey'
 key_suffix='-'
 state_a=tailscaled
 state_b='[.]state'
 private_a='BEGIN.*PRIVATE'
 private_b='KEY'
-forbidden="${first}tt|${second}th|@${mail_a}${domain_tail}|[A-Za-z]:[/\\\\]Users[/\\\\]|${network_suffix}|${address_prefix}[0-9]{1,3}[.]|${key_prefix}${key_suffix}|${private_a} ${private_b}|${state_a}${state_b}"
+forbidden="@${mail_a}${domain_tail}|[A-Za-z]:[/\\\\]Users[/\\\\]|${network_suffix}|${address_prefix}|${key_prefix}${key_suffix}|${private_a} ${private_b}|${state_a}${state_b}"
+
+# Exact personal identifiers belong in an ignored local file, one ERE per line.
+# History uses only generic rules because local identifiers may already occur in
+# old public commits; working and staged scans prevent introducing them again.
+if [ "$MODE" != history ] && [ -r "$LOCAL_PATTERNS" ]; then
+    local_forbidden=$(sed -E '/^[[:space:]]*(#|$)/d' "$LOCAL_PATTERNS" | paste -sd '|' -)
+    [ -z "$local_forbidden" ] || forbidden="$forbidden|$local_forbidden"
+fi
 
 cd "$ROOT"
 case "$MODE" in

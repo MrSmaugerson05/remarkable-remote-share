@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: [v0.1.0]
+    tags: ['v*']
 
 permissions:
   contents: write
@@ -18,9 +18,21 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Verify tag and source
+      - name: Load and verify release version
+        shell: bash
         run: |
-          test "$GITHUB_REF_NAME" = v0.1.0
+          set -euo pipefail
+          version=$(awk -F= '$1 == "PROJECT_VERSION" { print $2; exit }' compatibility.env)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$GITHUB_REF_NAME" = "v$version"
+          os=$(awk -F= '$1 == "SUPPORTED_OS" { print $2; exit }' compatibility.env)
+          test -n "$os"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_ARCHIVE=remarkable-remote-share-$version.tar.gz" >> "$GITHUB_ENV"
+          echo "SUPPORTED_OS=$os" >> "$GITHUB_ENV"
+
+      - name: Verify source
+        run: |
           sudo apt-get update
           sudo apt-get install --yes shellcheck
           mapfile -t scripts < <(find scripts tests src/controller -type f \( -name '*.sh' -o -name 'remote-share-control' \) -print)
@@ -58,9 +70,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v0.1.0 \
-            dist/remarkable-remote-share-0.1.0.tar.gz \
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/$RELEASE_ARCHIVE" \
             dist/SHA256SUMS \
             --verify-tag \
-            --title 'remarkable-remote-share v0.1.0' \
-            --notes 'Initial exact-firmware release for reMarkable Paper Pro on OS 3.28.0.172. See the README for prerequisites, installation, and recovery.'
+            --title "remarkable-remote-share $GITHUB_REF_NAME" \
+            --notes "Exact-firmware release for reMarkable Paper Pro on OS $SUPPORTED_OS. See the README for prerequisites, installation, and recovery."

@@ -9,10 +9,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = '0.1.0'
+$Compatibility = Join-Path (Split-Path -Parent $PSScriptRoot) 'compatibility.env'
+function Get-CompatibilityValue {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    $match = Get-Content -LiteralPath $Compatibility |
+        Where-Object { $_ -match "^$([regex]::Escape($Name))=(.+)$" } |
+        Select-Object -First 1
+    if (-not $match) { throw "compatibility.env does not define $Name" }
+    return ($match -split '=', 2)[1]
+}
+
+$Version = Get-CompatibilityValue PROJECT_VERSION
 $Project = 'MrSmaugerson05/remarkable-remote-share'
-$TailscaleVersion = '1.104.1'
-$TailscaleSha256 = 'f60294374967f3dfd8cf57bbbd474d6cfce32d123e3a8ddeab82a87940daa806'
+$TailscaleVersion = Get-CompatibilityValue TAILSCALE_VERSION
+$TailscaleSha256 = Get-CompatibilityValue TAILSCALE_ARM64_SHA256
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'PROJECT_VERSION is not a release version' }
+if ($TailscaleSha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'TAILSCALE_ARM64_SHA256 is invalid' }
 $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("remarkable-remote-share-" + [guid]::NewGuid().ToString('N'))
 $RemoteStage = "/home/root/remote-share-upload-$([guid]::NewGuid().ToString('N'))"
 

@@ -1,10 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION=0.1.0
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+COMPATIBILITY=$ROOT/compatibility.env
+setting() {
+    awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$COMPATIBILITY"
+}
+
+VERSION=$(setting PROJECT_VERSION)
 PROJECT=MrSmaugerson05/remarkable-remote-share
-TAILSCALE_VERSION=1.104.1
-TAILSCALE_SHA256=f60294374967f3dfd8cf57bbbd474d6cfce32d123e3a8ddeab82a87940daa806
+TAILSCALE_VERSION=$(setting TAILSCALE_VERSION)
+TAILSCALE_SHA256=$(setting TAILSCALE_ARM64_SHA256)
+if ! printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+$'; then
+    echo 'invalid PROJECT_VERSION' >&2
+    exit 1
+fi
+if [ -z "$TAILSCALE_VERSION" ] || [ "${#TAILSCALE_SHA256}" -ne 64 ]; then
+    echo 'compatibility.env is incomplete' >&2
+    exit 1
+fi
+case "$TAILSCALE_SHA256" in *[!0-9a-fA-F]*) echo 'invalid Tailscale SHA-256' >&2; exit 1 ;; esac
 
 usage() {
     echo "usage: $0 DEVICE_HOST SSH_IDENTITY" >&2
